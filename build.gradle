@@ -1,0 +1,115 @@
+buildscript {
+	repositories {
+		gradlePluginPortal()
+		flatDir {
+			dirs 'libs'
+		}
+		dependencies {
+			classpath name:'package-compileonly-sdk', version: '1.6.0'
+			classpath "gradle.plugin.com.github.johnrengelman:shadow:7.1.1"
+		}
+	}
+}
+
+plugins {
+	id 'java'
+}
+
+configure(allprojects){
+
+	apply plugin: 'com.github.johnrengelman.shadow'
+	apply plugin: "com.automationanywhere.command-codegen"
+
+	ext {
+		groupName = 'com.automationanywhere.botcommand'
+		testNgVersion = '6.14.3'
+		loggerVersion = '2.20.0'
+		playwrightVersion = '1.49.0'
+		gsonVersion = '2.10.1'
+	}
+	group "$groupName"
+
+	def versionPropsFile = rootProject.file('src/main/resources/version.properties')
+	def versionProps = new Properties()
+	if (versionPropsFile.exists()) {
+		versionPropsFile.withInputStream { versionProps.load(it) }
+	}
+	def nextBuildNum = ((versionProps['build.number'] ?: '0') as Integer) + 1
+	version = "1.0.${nextBuildNum}"
+
+	sourceCompatibility = JavaVersion.VERSION_11
+	targetCompatibility = JavaVersion.VERSION_11
+
+	compileJava.options.encoding = 'UTF-8'
+	compileTestJava.options.encoding = 'UTF-8'
+
+	repositories {
+		mavenLocal()
+		mavenCentral()
+		flatDir {
+			dirs 'libs'
+		}
+	}
+
+	packageJson{
+		artifactName = project.name
+		group = "$groupName"
+		author = "AI Developer"
+		generatePackageWithDateTime = false
+	}
+
+	task incrementBuildNumber {
+		doFirst {
+			def props = new Properties()
+			if (!versionPropsFile.parentFile.exists()) {
+				versionPropsFile.parentFile.mkdirs()
+			}
+			if (versionPropsFile.exists()) {
+				versionPropsFile.withInputStream { props.load(it) }
+			}
+			def buildNum = ((props['build.number'] ?: '0') as Integer) + 1
+			props['build.number'] = buildNum.toString()
+			versionPropsFile.withOutputStream { props.store(it, null) }
+			println "Build version: 1.0.${buildNum}"
+		}
+	}
+
+	processResources.dependsOn incrementBuildNumber
+	classes.dependsOn commandCodeGen
+
+	shadowJar {
+		dependsOn incrementBuildNumber
+		archiveBaseName = project.name
+		classifier = null
+		mergeServiceFiles('META-INF/spring.*')
+		mergeServiceFiles('META-INF/services/java.sql.Driver')
+		zip64 = true
+		exclude 'META-INF/MANIFEST.MF'
+		exclude 'META-INF/*.SF'
+		exclude 'META-INF/*.DSA'
+		exclude 'META-INF/*.RSA'
+		exclude 'com/automationanywhere/commandsdk/annotations/**'
+		exclude 'com/automationanywhere/commandsdk/model/**'
+		exclude 'com/automationanywhere/commandsdk/generator/**'
+		exclude 'com/automationanywhere/commandsdk/processing/**'
+		exclude 'com/automationanywhere/commandsdk/transformer/**'
+	}
+
+	assemble.dependsOn shadowJar
+	jar.enabled = false
+
+	dependencies {
+		annotationProcessor name: 'package-compileonly-sdk', version: '1.6.0'
+
+		compileOnly name: 'package-compileonly-sdk', version: '1.6.0'
+		compileOnly group: "org.apache.logging.log4j", name: "log4j-api", version: "$loggerVersion"
+
+		implementation name: 'package-runtime-sdk', version: '1.0.0'
+		implementation "com.microsoft.playwright:playwright:$playwrightVersion"
+		implementation "com.google.code.gson:gson:$gsonVersion"
+		implementation group: "org.apache.logging.log4j", name: "log4j-core", version: "$loggerVersion"
+
+		testImplementation name: 'package-compileonly-sdk', version: '1.6.0'
+		testImplementation group: "org.testng", name:"testng", version: "$testNgVersion"
+	}
+}

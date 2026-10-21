@@ -1,0 +1,20 @@
+# Gradle build outputs (excludes 193MB fat JAR to comply with GitHub limits)
+build/
+.gradle/
+bin/
+out/
+
+# IDE configurations
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

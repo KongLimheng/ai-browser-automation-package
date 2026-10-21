@@ -1,0 +1,11 @@
+{
+  "name": "AIBrowserAutomation",
+  "label": "AI Browser Automation",
+  "description": "Autonomous AI-driven browser automation powered by Google Gemini and Playwright",
+  "group": "",
+  "artifactName": "",
+  "packageVersion": "",
+  "codeVersion": "",
+  "author": "AI Developer",
+  "commands": []
+}
