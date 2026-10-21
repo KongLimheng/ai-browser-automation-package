@@ -1,10 +1,11 @@
 # AI Browser Automation Package for Automation Anywhere (A360)
 
 [![Automation Anywhere](https://img.shields.io/badge/Automation%20Anywhere-A360-orange.svg)](https://www.automationanywhere.com/)
+[![CI Build & Test](https://github.com/KongLimheng/ai-browser-automation-package/actions/workflows/ci.yml/badge.svg)](https://github.com/KongLimheng/ai-browser-automation-package/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/KongLimheng/ai-browser-automation-package?color=blue)](https://github.com/KongLimheng/ai-browser-automation-package/releases/latest)
 [![Java](https://img.shields.io/badge/Java-11-blue.svg)](https://adoptium.net/)
 [![Gemini](https://img.shields.io/badge/Google%20Gemini-3.8%20Flash-4285F4.svg)](https://ai.google.dev/)
 [![Playwright](https://img.shields.io/badge/Playwright-Java-green.svg)](https://playwright.dev/java/)
-[![Version](https://img.shields.io/badge/Package%20Version-1.0.9-brightgreen.svg)](build/libs/AIBrowserAutomation-1.0.9.jar)
 
 An enterprise-grade custom package for **Automation Anywhere (Automation 360 / A360)** that enables autonomous web automation driven by natural language prompts. Powered by **Google Gemini Multimodal API** (up to **Gemini 3.8 Flash**) and **Playwright for Java**, it navigates websites, enters text, clicks buttons, solves multi-step workflows, and extracts data without requiring brittle XPath or CSS selectors.
 
@@ -67,13 +68,15 @@ flowchart TD
 
 ---
 
-## Package Deliverable
+## Package Deliverables & Releases
 
-The compiled, self-contained package JAR is ready for deployment:
+The pre-compiled, self-contained package JAR can be downloaded directly from GitHub Releases:
 
-| Deliverable | Path | Size |
-| :--- | :--- | :--- |
-| **AIBrowserAutomation-1.0.9.jar** | [`build/libs/AIBrowserAutomation-1.0.9.jar`](build/libs/AIBrowserAutomation-1.0.9.jar) | ~193 MB |
+👉 **[Download Latest Package JAR from GitHub Releases](https://github.com/KongLimheng/ai-browser-automation-package/releases/latest)**
+
+| Deliverable | Source / Download | Size | Description |
+| :--- | :--- | :--- | :--- |
+| **AIBrowserAutomation-1.0.9.jar** | [GitHub Releases](https://github.com/KongLimheng/ai-browser-automation-package/releases/latest) | ~193 MB | Standalone fat JAR ready to import directly into A360 Control Room |
 
 > [!NOTE]
 > The JAR contains all required runtime dependencies including Playwright for Java, native platform drivers, Log4j2, and Google Gson.
@@ -85,7 +88,7 @@ The compiled, self-contained package JAR is ready for deployment:
 1. Log into your **Automation 360 Control Room** with an administrator or package manager account.
 2. Navigate to **Manage** > **Packages** in the left-hand navigation menu.
 3. Click the **Add Package** icon in the top-right corner.
-4. Browse to and select [`AIBrowserAutomation-1.0.9.jar`](build/libs/AIBrowserAutomation-1.0.9.jar).
+4. Download and select [`AIBrowserAutomation-1.0.9.jar`](https://github.com/KongLimheng/ai-browser-automation-package/releases/latest).
 5. Once uploaded, the Control Room displays:
    - **Name**: `AIBrowserAutomation`
    - **Version**: `1.0.9`
@@ -411,6 +414,34 @@ build/libs/AIBrowserAutomation-1.0.9.jar
 
 ### Q3: What happens if a dropdown uses custom `<div>` elements instead of `<select>`?
 **Answer**: Gemini natively handles custom JavaScript/React/Angular dropdowns. In the prompt, state: *"Click the dropdown box to expand the menu, then click option 'B'."*
+
+---
+
+## CI/CD Pipeline & Automated Releases
+
+The repository includes pre-configured **GitHub Actions** workflows:
+
+### 1. Continuous Integration (`ci.yml`)
+- Automatically runs on every `push` and `pull_request` to `main`.
+- Sets up Eclipse Temurin JDK 11 and caches Gradle dependencies.
+- Runs the test suite (`./gradlew clean test --info`).
+- Compiles the fat JAR (`./gradlew shadowJar`) and verifies `package.json` command registration.
+
+### 2. Automated Releases (`release.yml`)
+To trigger an automated build and release:
+```bash
+# 1. Tag your commit
+git tag v1.1.0
+
+# 2. Push tag to GitHub
+git push origin v1.1.0
+```
+GitHub Actions will automatically:
+1. Spin up an Ubuntu runner.
+2. Compile and package the fat JAR.
+3. Create the GitHub Release matching the tag.
+4. Upload `AIBrowserAutomation-*.jar` directly as a downloadable release asset.
+5. Generate release notes from git commits.
 
 ---
 

@@ -1,0 +1,38 @@
+name: CI Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew clean test --info
+
+      - name: Verify Package Fat JAR Assembly
+        run: ./gradlew shadowJar
+
+      - name: Verify package.json generation in JAR
+        run: |
+          JAR_FILE=$(ls build/libs/AIBrowserAutomation-*.jar | head -n 1)
+          echo "Inspecting $JAR_FILE"
+          unzip -p "$JAR_FILE" package.json | grep "runAIBrowserTask"
