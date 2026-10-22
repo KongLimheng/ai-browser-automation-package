@@ -141,7 +141,7 @@ ai-browser-automation-package/
   10. `logFilePath` (`TEXT`, Optional): Target path for real-time log streaming.
   11. `customModel` (`TEXT`, Optional): Custom model name override.
   12. `downloadDirectory` (`TEXT`, Optional): Target path for intercepted downloads.
-  13. `fallbackModel` (`SELECT`, Optional): Fallback Gemini model when primary model encounters 503 high demand or quota exhaustion (default: `gemini-2.5-flash`).
+  13. `fallbackModel` (`SELECT`, Optional): Fallback Gemini model when primary model encounters 503 high demand or quota exhaustion (default: `gemini-2.0-flash`).
   
   *\* At least one API key must be provided via param 2 or param 3.*
 
@@ -190,9 +190,9 @@ ai-browser-automation-package/
     - HTTP `500`, `502`, `504` (Transient gateway/server errors)
     - Response bodies containing `resource_exhausted`, `quota_exceeded`, `overloaded`, `temporarily unavailable`, `high demand`, `spikes in demand`, or `unavailable`.
 - **Tier 2: Autonomous Model Fallback Strategy**:
-  - If a primary model (e.g. `gemini-3.8-flash`) experiences HTTP 503 capacity spikes ("This model is currently experiencing high demand") or key quota exhaustion across all configured keys, the client automatically triggers model failover to `gemini-2.5-flash` (or secondary fallback `gemini-2.0-flash`).
+  - If a primary model (e.g. `gemini-3.8-flash`) experiences HTTP 503 capacity spikes ("This model is currently experiencing high demand"), HTTP 404 (model deprecated / no longer available to new users), or key quota exhaustion across all configured keys, the client automatically triggers model failover to `gemini-2.0-flash` (with secondary safety fallback to `gemini-1.5-flash`).
   - The entire key pool rotation strategy is re-applied under the fallback model.
-  - Upon success, the fallback model is promoted to `activeModel` for the remainder of the session to prevent repeating 503 latency on subsequent steps.
+  - Upon success, the fallback model is promoted to `activeModel` for the remainder of the session to prevent repeating latency or error on subsequent steps.
   - Failovers are logged via `logModelFallback` and returned via `activeModel` and `modelFallbackOccurred` in the result dictionary.
 
 ### 4.5 Diagnostic Logging: `ExecutionLogger`

@@ -67,7 +67,24 @@ public class AgentAction {
     }
 
     public boolean isPressEnter() {
-        return pressEnter != null && pressEnter;
+        if (pressEnter != null && pressEnter) {
+            return true;
+        }
+        // Fallback: Check if description explicitly states intent to press/hit Enter
+        if (description != null && !description.isEmpty()) {
+            String lower = description.toLowerCase();
+            if (lower.contains("press enter")
+                    || lower.contains("presses enter")
+                    || lower.contains("pressing enter")
+                    || lower.contains("hit enter")
+                    || lower.contains("hits enter")
+                    || lower.contains("hitting enter")
+                    || lower.contains("and enter")
+                    || lower.contains("then enter")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void setPressEnter(Boolean pressEnter) {

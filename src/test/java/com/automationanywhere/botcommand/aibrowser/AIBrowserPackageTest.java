@@ -169,22 +169,83 @@ public class AIBrowserPackageTest {
     public void testGeminiClientModelCandidates() {
         ApiKeyPool pool = new ApiKeyPool("dummy-key", null);
 
-        // Primary 3.8 Flash, default fallback 2.5 Flash
+        // Primary 3.8 Flash, default fallback 2.0 Flash with 1.5 Flash safety chain
         GeminiClient clientDefault = new GeminiClient(pool, "gemini-3.8-flash");
         List<String> defaultCandidates = clientDefault.getModelCandidates();
-        Assert.assertEquals(defaultCandidates, Arrays.asList("gemini-3.8-flash", "gemini-2.5-flash"));
+        Assert.assertEquals(defaultCandidates, Arrays.asList("gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"));
         Assert.assertEquals(clientDefault.getActiveModel(), "gemini-3.8-flash");
         Assert.assertFalse(clientDefault.isFallbackActive());
 
-        // Primary 2.5 Flash with fallback 2.5 Flash -> auto resolves secondary safety fallback 2.0 Flash
-        GeminiClient client25 = new GeminiClient(pool, "gemini-2.5-flash", "gemini-2.5-flash");
+        // Primary 3.8 Flash with legacy fallback 2.5 Flash -> auto appends 2.0 and 1.5 Flash safety chain
+        GeminiClient client25 = new GeminiClient(pool, "gemini-3.8-flash", "gemini-2.5-flash");
         List<String> c25Candidates = client25.getModelCandidates();
-        Assert.assertEquals(c25Candidates, Arrays.asList("gemini-2.5-flash", "gemini-2.0-flash"));
+        Assert.assertEquals(c25Candidates, Arrays.asList("gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"));
 
         // Fallback explicitly disabled with "NONE"
         GeminiClient clientNoFallback = new GeminiClient(pool, "gemini-3.8-flash", "NONE");
         List<String> noFallbackCandidates = clientNoFallback.getModelCandidates();
         Assert.assertEquals(noFallbackCandidates, Collections.singletonList("gemini-3.8-flash"));
+    }
+
+    @Test
+    public void testPressEnterIntentDetection() {
+        AgentAction action1 = new AgentAction();
+        action1.setType("TYPE");
+        action1.setElementId(6);
+        action1.setText("search wikipedia");
+        action1.setPressEnter(false);
+        action1.setDescription("Type 'search wikipedia' into the search bar and press Enter.");
+        // Should detect 'press Enter' from description even if boolean is false
+        Assert.assertTrue(action1.isPressEnter(), "Should detect press Enter from description");
+
+        AgentAction action2 = new AgentAction();
+        action2.setType("TYPE");
+        action2.setElementId(2);
+        action2.setText("John Doe");
+        action2.setDescription("Fill first name in the input box");
+        Assert.assertFalse(action2.isPressEnter(), "Should not press Enter when not mentioned");
+
+        AgentAction action3 = new AgentAction();
+        action3.setType("TYPE");
+        action3.setElementId(5);
+        action3.setText("laptops");
+        action3.setDescription("Hit enter to search catalog");
+        Assert.assertTrue(action3.isPressEnter(), "Should detect 'hit enter'");
+
+        AgentAction action4 = new AgentAction();
+        action4.setType("TYPE");
+        action4.setPressEnter(true);
+        action4.setDescription("Type something");
+        Assert.assertTrue(action4.isPressEnter(), "Explicit boolean true should always return true");
+    }
+
+    @Test
+    public void testModelUnavailableErrorDetection() {
+        // HTTP 404 for deprecated model
+        String deprecated404 = "{\n" +
+                " \"error\": {\n" +
+                " \"code\": 404,\n" +
+                " \"message\": \"This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements.\",\n" +
+                " \"status\": \"NOT_FOUND\"\n" +
+                " }\n" +
+                "}";
+        Assert.assertTrue(GeminiClient.isModelUnavailableError(404, deprecated404));
+
+        // HTTP 503 high demand
+        String highDemand503 = "{\n" +
+                " \"error\": {\n" +
+                " \"code\": 503,\n" +
+                " \"message\": \"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.\",\n" +
+                " \"status\": \"UNAVAILABLE\"\n" +
+                " }\n" +
+                "}";
+        Assert.assertTrue(GeminiClient.isModelUnavailableError(503, highDemand503));
+
+        // HTTP 529 site overloaded
+        Assert.assertTrue(GeminiClient.isModelUnavailableError(529, "Site overloaded"));
+
+        // Regular non-model client error (e.g. 400 invalid argument)
+        Assert.assertFalse(GeminiClient.isModelUnavailableError(400, "{\"error\": \"INVALID_ARGUMENT: missing prompt\"}"));
     }
 
     @Test

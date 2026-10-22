@@ -1,5 +1,16 @@
 package com.automationanywhere.botcommand.aibrowser.actions;
 
+import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
+import static com.automationanywhere.commandsdk.model.DataType.STRING;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.automationanywhere.botcommand.aibrowser.agent.AIBrowserAgent;
 import com.automationanywhere.botcommand.aibrowser.gemini.ApiKeyPool;
 import com.automationanywhere.botcommand.aibrowser.model.AgentResult;
@@ -7,40 +18,22 @@ import com.automationanywhere.botcommand.data.Value;
 import com.automationanywhere.botcommand.data.impl.DictionaryValue;
 import com.automationanywhere.botcommand.data.impl.StringValue;
 import com.automationanywhere.botcommand.exception.BotCommandException;
-import com.automationanywhere.commandsdk.annotations.*;
 import com.automationanywhere.commandsdk.annotations.BotCommand;
+import com.automationanywhere.commandsdk.annotations.CommandPkg;
+import com.automationanywhere.commandsdk.annotations.Execute;
+import com.automationanywhere.commandsdk.annotations.Idx;
+import com.automationanywhere.commandsdk.annotations.Pkg;
 import com.automationanywhere.commandsdk.annotations.rules.NotEmpty;
 import com.automationanywhere.commandsdk.model.AllowedTarget;
 import com.automationanywhere.commandsdk.model.AttributeType;
 import com.automationanywhere.commandsdk.model.DataType;
 import com.automationanywhere.core.security.SecureString;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import static com.automationanywhere.commandsdk.model.DataType.DICTIONARY;
-import static com.automationanywhere.commandsdk.model.DataType.STRING;
 
 @BotCommand
-@CommandPkg(
-    label = "Run AI Browser Task",
-    name = "runAIBrowserTask",
-    description = "Autonomous browser automation using natural language prompts powered by Google Gemini and Playwright",
-    node_label = "AI Browser: {{prompt}}",
-    icon = "ai-browser.svg",
-    allowed_agent_targets = {
+@CommandPkg(label = "Run AI Browser Task", name = "runAIBrowserTask", description = "Autonomous browser automation using natural language prompts powered by Google Gemini and Playwright", node_label = "AI Browser: {{prompt}}", icon = "ai-browser.svg", allowed_agent_targets = {
         AllowedTarget.WINDOWS,
         AllowedTarget.MAC_OS
-    },
-    return_type = DICTIONARY,
-    return_sub_type = STRING,
-    return_required = true,
-    comment = true
-)
+}, return_type = DICTIONARY, return_sub_type = STRING, return_required = true, comment = true)
 public class RunAIBrowserTaskAction {
 
     private static final Logger logger = LogManager.getLogger(RunAIBrowserTaskAction.class);
@@ -48,80 +41,47 @@ public class RunAIBrowserTaskAction {
     @Execute
     public DictionaryValue execute(
 
-        @Idx(index = "1", type = AttributeType.TEXTAREA)
-        @Pkg(label = "Natural Language Prompt / Objective", description = "Describe what the agent should accomplish on the browser (e.g. 'Search for laptop on Amazon and extract the price of the first item')")
-        @NotEmpty
-        String prompt,
+            @Idx(index = "1", type = AttributeType.TEXTAREA) @Pkg(label = "Natural Language Prompt / Objective", description = "Describe what the agent should accomplish on the browser (e.g. 'Search for laptop on Amazon and extract the price of the first item')") @NotEmpty String prompt,
 
-        @Idx(index = "2", type = AttributeType.CREDENTIAL)
-        @Pkg(label = "Gemini API Key(s)", description = "Google Gemini API Key or multiple keys separated by comma, semicolon, or newline for automatic failover.")
-        SecureString apiKey,
+            @Idx(index = "2", type = AttributeType.CREDENTIAL) @Pkg(label = "Gemini API Key(s)", description = "Google Gemini API Key or multiple keys separated by comma, semicolon, or newline for automatic failover.") SecureString apiKey,
 
-        @Idx(index = "3", type = AttributeType.LIST)
-        @Pkg(label = "Gemini API Keys (List Variable)", description = "Optional: List of Gemini API keys from an Automation Anywhere List variable.")
-        List<Value> apiKeysList,
+            @Idx(index = "3", type = AttributeType.LIST) @Pkg(label = "Gemini API Keys (List Variable)", description = "Optional: List of Gemini API keys from an Automation Anywhere List variable.") List<Value> apiKeysList,
 
-        @Idx(index = "4", type = AttributeType.TEXT)
-        @Pkg(label = "Start URL (Optional)", description = "Initial website URL to open (e.g. https://www.google.com, google.com). Leave blank to let AI decide or navigate.", default_value = "", default_value_type = DataType.STRING)
-        String startUrl,
+            @Idx(index = "4", type = AttributeType.TEXT) @Pkg(label = "Start URL (Optional)", description = "Initial website URL to open (e.g. https://www.google.com, google.com). Leave blank to let AI decide or navigate.", default_value = "", default_value_type = DataType.STRING) String startUrl,
 
-        @Idx(index = "5", type = AttributeType.SELECT, options = {
-            @Idx.Option(index = "5.1", pkg = @Pkg(label = "Gemini 3.8 Flash (Latest frontier reasoning & agentic — Recommended)", value = "gemini-3.8-flash")),
-            @Idx.Option(index = "5.2", pkg = @Pkg(label = "Gemini 3.5 Flash (Advanced multimodal reasoning)", value = "gemini-3.5-flash")),
-            @Idx.Option(index = "5.3", pkg = @Pkg(label = "Gemini 3.0 Flash (Next-gen fast multimodal)", value = "gemini-3-flash")),
-            @Idx.Option(index = "5.4", pkg = @Pkg(label = "Gemini 2.5 Flash (Built-in reasoning Flash)", value = "gemini-2.5-flash")),
-            @Idx.Option(index = "5.5", pkg = @Pkg(label = "Gemini 2.0 Flash (Fast multimodal)", value = "gemini-2.0-flash")),
-            @Idx.Option(index = "5.6", pkg = @Pkg(label = "Gemini 1.5 Flash (Lightweight)", value = "gemini-1.5-flash")),
-            @Idx.Option(index = "5.7", pkg = @Pkg(label = "Gemini 1.5 Pro (Complex reasoning)", value = "gemini-1.5-pro")),
-            @Idx.Option(index = "5.8", pkg = @Pkg(label = "Custom Model (Specify below in Custom Model ID)", value = "CUSTOM"))
-        })
-        @Pkg(label = "Gemini Model", description = "Choose the Gemini model for visual understanding and decision making", default_value = "gemini-3.8-flash", default_value_type = DataType.STRING)
-        @NotEmpty
-        String model,
+            @Idx(index = "5", type = AttributeType.SELECT, options = {
+                    @Idx.Option(index = "5.1", pkg = @Pkg(label = "Gemini 3.8 Flash (Latest frontier reasoning & agentic — Recommended)", value = "gemini-3.8-flash")),
+                    @Idx.Option(index = "5.2", pkg = @Pkg(label = "Gemini 3.5 Flash (Advanced multimodal reasoning)", value = "gemini-3.5-flash")),
+                    @Idx.Option(index = "5.3", pkg = @Pkg(label = "Gemini 3.0 Flash (Next-gen fast multimodal)", value = "gemini-3-flash")),
 
-        @Idx(index = "6", type = AttributeType.SELECT, options = {
-            @Idx.Option(index = "6.1", pkg = @Pkg(label = "Google Chrome (Installed system browser)", value = "CHROME")),
-            @Idx.Option(index = "6.2", pkg = @Pkg(label = "Microsoft Edge (Installed system browser)", value = "MSEDGE")),
-            @Idx.Option(index = "6.3", pkg = @Pkg(label = "Chromium (Bundled)", value = "CHROMIUM")),
-            @Idx.Option(index = "6.4", pkg = @Pkg(label = "Connect to Existing Browser (via Chrome DevTools Protocol CDP)", value = "CDP"))
-        })
-        @Pkg(label = "Browser Type", description = "Target browser engine or existing session", default_value = "CHROME", default_value_type = DataType.STRING)
-        @NotEmpty
-        String browserType,
+                    @Idx.Option(index = "5.8", pkg = @Pkg(label = "Custom Model (Specify below in Custom Model ID)", value = "CUSTOM"))
+            }) @Pkg(label = "Gemini Model", description = "Choose the Gemini model for visual understanding and decision making", default_value = "gemini-3.8-flash", default_value_type = DataType.STRING) @NotEmpty String model,
 
-        @Idx(index = "7", type = AttributeType.CHECKBOX)
-        @Pkg(label = "Run Headless (Background)", description = "Check to run invisibly in background. Uncheck to watch the browser live.", default_value = "false", default_value_type = DataType.BOOLEAN)
-        Boolean headless,
+            @Idx(index = "6", type = AttributeType.SELECT, options = {
+                    @Idx.Option(index = "6.1", pkg = @Pkg(label = "Google Chrome (Installed system browser)", value = "CHROME")),
+                    @Idx.Option(index = "6.2", pkg = @Pkg(label = "Microsoft Edge (Installed system browser)", value = "MSEDGE")),
+                    @Idx.Option(index = "6.3", pkg = @Pkg(label = "Chromium (Bundled)", value = "CHROMIUM")),
+                    @Idx.Option(index = "6.4", pkg = @Pkg(label = "Connect to Existing Browser (via Chrome DevTools Protocol CDP)", value = "CDP"))
+            }) @Pkg(label = "Browser Type", description = "Target browser engine or existing session", default_value = "CHROME", default_value_type = DataType.STRING) @NotEmpty String browserType,
 
-        @Idx(index = "8", type = AttributeType.NUMBER)
-        @Pkg(label = "Max Steps Limit", description = "Maximum number of autonomous browser steps to prevent runaway loops", default_value = "15", default_value_type = DataType.NUMBER)
-        @NotEmpty
-        Double maxSteps,
+            @Idx(index = "7", type = AttributeType.CHECKBOX) @Pkg(label = "Run Headless (Background)", description = "Check to run invisibly in background. Uncheck to watch the browser live.", default_value = "false", default_value_type = DataType.BOOLEAN) Boolean headless,
 
-        @Idx(index = "9", type = AttributeType.TEXT)
-        @Pkg(label = "CDP Endpoint URL (Advanced)", description = "DevTools WebSocket/HTTP URL (e.g. http://localhost:9222). Only used if Browser Type is set to CDP.", default_value = "", default_value_type = DataType.STRING)
-        String cdpEndpoint,
+            @Idx(index = "8", type = AttributeType.NUMBER) @Pkg(label = "Max Steps Limit", description = "Maximum number of autonomous browser steps to prevent runaway loops", default_value = "15", default_value_type = DataType.NUMBER) @NotEmpty Double maxSteps,
 
-        @Idx(index = "10", type = AttributeType.TEXT)
-        @Pkg(label = "Log File Path (Optional)", description = "File path to save real-time execution logs (e.g. C:\\Bots\\Logs\\ai_browser.log). Accepts bot variables. If left blank, a timestamped file in the temp directory will be created.", default_value = "", default_value_type = DataType.STRING)
-        String logFilePath,
+            @Idx(index = "9", type = AttributeType.TEXT) @Pkg(label = "CDP Endpoint URL (Advanced)", description = "DevTools WebSocket/HTTP URL (e.g. http://localhost:9222). Only used if Browser Type is set to CDP.", default_value = "", default_value_type = DataType.STRING) String cdpEndpoint,
 
-        @Idx(index = "11", type = AttributeType.TEXT)
-        @Pkg(label = "Custom Gemini Model ID (Optional)", description = "Specify custom or fine-tuned Gemini model ID (e.g. gemini-3.8-flash) if 'Custom Model' is selected above, or override model name.", default_value = "", default_value_type = DataType.STRING)
-        String customModel,
+            @Idx(index = "10", type = AttributeType.TEXT) @Pkg(label = "Log File Path (Optional)", description = "File path to save real-time execution logs (e.g. C:\\Bots\\Logs\\ai_browser.log). Accepts bot variables. If left blank, a timestamped file in the temp directory will be created.", default_value = "", default_value_type = DataType.STRING) String logFilePath,
 
-        @Idx(index = "12", type = AttributeType.TEXT)
-        @Pkg(label = "Download Directory (Optional)", description = "Directory path to save intercepted file downloads (e.g. D:\\abc or C:\\Bots\\Downloads). Accepts bot variables. If left blank, files are saved to a temporary folder.", default_value = "", default_value_type = DataType.STRING)
-        String downloadDirectory,
+            @Idx(index = "11", type = AttributeType.TEXT) @Pkg(label = "Custom Gemini Model ID (Optional)", description = "Specify custom or fine-tuned Gemini model ID (e.g. gemini-3.8-flash) if 'Custom Model' is selected above, or override model name.", default_value = "", default_value_type = DataType.STRING) String customModel,
 
-        @Idx(index = "13", type = AttributeType.SELECT, options = {
-            @Idx.Option(index = "13.1", pkg = @Pkg(label = "Gemini 2.5 Flash (Recommended Default Fallback)", value = "gemini-2.5-flash")),
-            @Idx.Option(index = "13.2", pkg = @Pkg(label = "Gemini 2.0 Flash", value = "gemini-2.0-flash")),
-            @Idx.Option(index = "13.3", pkg = @Pkg(label = "Gemini 1.5 Flash", value = "gemini-1.5-flash")),
-            @Idx.Option(index = "13.4", pkg = @Pkg(label = "Disable Model Fallback", value = "NONE"))
-        })
-        @Pkg(label = "Fallback Gemini Model (Optional)", description = "Automatic fallback model if primary model experiences HTTP 503 high demand or quota exhaustion.", default_value = "gemini-2.5-flash", default_value_type = DataType.STRING)
-        String fallbackModel
+            @Idx(index = "12", type = AttributeType.TEXT) @Pkg(label = "Download Directory (Optional)", description = "Directory path to save intercepted file downloads (e.g. D:\\abc or C:\\Bots\\Downloads). Accepts bot variables. If left blank, files are saved to a temporary folder.", default_value = "", default_value_type = DataType.STRING) String downloadDirectory,
+
+            @Idx(index = "13", type = AttributeType.SELECT, options = {
+                    @Idx.Option(index = "13.1", pkg = @Pkg(label = "Gemini 3.5 Flash Lite(Recommended Default Fallback)", value = "gemini-3.5-flash-lite")),
+                    @Idx.Option(index = "13.2", pkg = @Pkg(label = "Gemini 1.5 Flash (Lightweight universal fallback)", value = "gemini-1.5-flash")),
+                    @Idx.Option(index = "13.3", pkg = @Pkg(label = "Gemini 2.5 Flash (Legacy)", value = "gemini-2.5-flash")),
+                    @Idx.Option(index = "13.4", pkg = @Pkg(label = "Disable Model Fallback", value = "NONE"))
+            }) @Pkg(label = "Fallback Gemini Model (Optional)", description = "Automatic fallback model if primary model experiences HTTP 503 high demand or quota exhaustion.", default_value = "gemini-2.0-flash", default_value_type = DataType.STRING) String fallbackModel
 
     ) {
         // Resolve effective model ID
@@ -137,9 +97,11 @@ public class RunAIBrowserTaskAction {
         }
 
         String effectiveFallbackModel = (fallbackModel != null && !fallbackModel.trim().isEmpty())
-                ? fallbackModel.trim() : "gemini-2.5-flash";
+                ? fallbackModel.trim()
+                : "gemini-2.0-flash";
 
-        logger.info("Executing RunAIBrowserTaskAction - Model: {}, FallbackModel: {}, Browser: {}, Headless: {}, LogPath: {}, DownloadDir: {}",
+        logger.info(
+                "Executing RunAIBrowserTaskAction - Model: {}, FallbackModel: {}, Browser: {}, Headless: {}, LogPath: {}, DownloadDir: {}",
                 effectiveModel, effectiveFallbackModel, browserType, headless, logFilePath, downloadDirectory);
 
         if (prompt == null || prompt.trim().isEmpty()) {
@@ -158,23 +120,23 @@ public class RunAIBrowserTaskAction {
 
         ApiKeyPool keyPool = new ApiKeyPool(rawApiKey, listKeys);
         if (keyPool.size() == 0) {
-            throw new BotCommandException("At least one Gemini API key must be provided via 'Gemini API Key(s)' or 'Gemini API Keys (List Variable)'.");
+            throw new BotCommandException(
+                    "At least one Gemini API key must be provided via 'Gemini API Key(s)' or 'Gemini API Keys (List Variable)'.");
         }
 
         int stepsLimit = (maxSteps != null && maxSteps > 0) ? maxSteps.intValue() : 15;
         boolean isHeadless = headless != null && headless;
 
         AIBrowserAgent agent = new AIBrowserAgent(
-            keyPool,
-            effectiveModel,
-            effectiveFallbackModel,
-            isHeadless,
-            stepsLimit,
-            browserType,
-            cdpEndpoint,
-            logFilePath,
-            downloadDirectory
-        );
+                keyPool,
+                effectiveModel,
+                effectiveFallbackModel,
+                isHeadless,
+                stepsLimit,
+                browserType,
+                cdpEndpoint,
+                logFilePath,
+                downloadDirectory);
 
         AgentResult result = agent.execute(prompt, startUrl);
 

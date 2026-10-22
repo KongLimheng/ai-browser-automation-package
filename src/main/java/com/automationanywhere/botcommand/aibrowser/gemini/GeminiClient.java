@@ -43,7 +43,7 @@ public class GeminiClient {
         } else if (fallbackModel != null && !fallbackModel.trim().isEmpty()) {
             this.fallbackModel = fallbackModel.trim();
         } else {
-            this.fallbackModel = "gemini-2.5-flash";
+            this.fallbackModel = "gemini-2.0-flash";
         }
 
         this.httpClient = HttpClient.newBuilder()
@@ -52,11 +52,11 @@ public class GeminiClient {
     }
 
     public GeminiClient(ApiKeyPool apiKeyPool, String primaryModel) {
-        this(apiKeyPool, primaryModel, "gemini-2.5-flash");
+        this(apiKeyPool, primaryModel, "gemini-2.0-flash");
     }
 
     public GeminiClient(String singleApiKey, String model) {
-        this(new ApiKeyPool(singleApiKey, Collections.emptyList()), model, "gemini-2.5-flash");
+        this(new ApiKeyPool(singleApiKey, Collections.emptyList()), model, "gemini-2.0-flash");
     }
 
     public List<String> getModelCandidates() {
@@ -65,13 +65,36 @@ public class GeminiClient {
             candidates.add(activeModel);
         }
         if (fallbackModel != null && !fallbackModel.isEmpty() && !"NONE".equalsIgnoreCase(fallbackModel)) {
-            if (!fallbackModel.equalsIgnoreCase(activeModel)) {
+            if (!candidates.contains(fallbackModel)) {
                 candidates.add(fallbackModel);
-            } else if ("gemini-2.5-flash".equalsIgnoreCase(activeModel)) {
+            }
+            if (!candidates.contains("gemini-2.0-flash")) {
                 candidates.add("gemini-2.0-flash");
+            }
+            if (!candidates.contains("gemini-1.5-flash")) {
+                candidates.add("gemini-1.5-flash");
             }
         }
         return candidates;
+    }
+
+    public static boolean isModelUnavailableError(int statusCode, String responseBody) {
+        if (statusCode == 404 || statusCode == 503 || statusCode == 529) {
+            return true;
+        }
+        if (responseBody != null && !responseBody.isEmpty()) {
+            String lower = responseBody.toLowerCase();
+            return lower.contains("no longer available")
+                    || lower.contains("not_found")
+                    || lower.contains("not found")
+                    || lower.contains("high demand")
+                    || lower.contains("spikes in demand")
+                    || lower.contains("unavailable")
+                    || lower.contains("overloaded")
+                    || lower.contains("unknown model")
+                    || lower.contains("invalid model");
+        }
+        return false;
     }
 
     public AgentAction decideNextAction(String goal, String currentUrl, String domContext, String base64Screenshot,
@@ -143,6 +166,15 @@ public class GeminiClient {
                 logger.warn("Gemini API call failed with status {} on Model '{}' Key #{}: {}", statusCode,
                         currentCandidateModel, keyIndex, responseBody);
 
+                // If this is a model-level deprecation or 404 NOT_FOUND error, fast-track to next fallback model
+                if (isModelUnavailableError(statusCode, responseBody) && m < candidateModels.size() - 1) {
+                    if (statusCode == 404 || responseBody.toLowerCase().contains("no longer available")) {
+                        logger.warn("Model '{}' is deprecated or not available (HTTP {}). Fast-tracking failover to next fallback model...",
+                                currentCandidateModel, statusCode);
+                        break;
+                    }
+                }
+
                 // Auto-rotate key on rotatable error if more keys are available
                 if (ApiKeyPool.isRotatableError(statusCode, responseBody) && attempt < maxAttempts - 1) {
                     apiKeyPool.rotate();
@@ -169,6 +201,10 @@ public class GeminiClient {
 
                 // If non-rotatable error (e.g. invalid syntax 400), don't burn other keys
                 if (!ApiKeyPool.isRotatableError(statusCode, responseBody)) {
+                    if (isModelUnavailableError(statusCode, responseBody) && m < candidateModels.size() - 1) {
+                        logger.warn("Model unavailable error detected (HTTP {}). Failing over to next fallback model candidate...", statusCode);
+                        break;
+                    }
                     if (execLogger != null) {
                         execLogger.warn(
                                 String.format("Gemini API non-retryable error on Model '%s' Key #%d: HTTP %d - %s",
@@ -231,7 +267,7 @@ public class GeminiClient {
         sb.append("Carefully inspect the screenshot and element list, then choose ONE next action.\n\n");
         sb.append("Available action types:\n");
         sb.append("- CLICK: requires 'elementId' (number)\n");
-        sb.append("- TYPE: requires 'elementId' (number) and 'text' (string), optionally 'pressEnter' (boolean)\n");
+        sb.append("- TYPE: requires 'elementId' (number) and 'text' (string). If you want to submit or press Enter after typing (e.g. search bars, login fields), you MUST set 'pressEnter': true.\n");
         sb.append("- NAVIGATE: requires 'url' (string, e.g. 'https://www.google.com')\n");
         sb.append("- SCROLL: requires 'scrollAmount' (number, e.g. 500 for down, -500 for up)\n");
         sb.append("- KEY_PRESS: requires 'key' (e.g. 'Enter', 'Tab', 'Escape')\n");
@@ -295,6 +331,7 @@ public class GeminiClient {
 
         JsonObject pressEnterProp = new JsonObject();
         pressEnterProp.addProperty("type", "BOOLEAN");
+        pressEnterProp.addProperty("description", "Set to true whenever Enter should be pressed after typing (e.g. search bars, form submission).");
         properties.add("pressEnter", pressEnterProp);
 
         JsonObject urlProp = new JsonObject();

@@ -35,7 +35,7 @@ public class AIBrowserAgent {
     public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, String fallbackModel, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath, String downloadDirectory) {
         this.apiKeyPool = apiKeyPool != null ? apiKeyPool : new ApiKeyPool("", Collections.emptyList());
         this.model = model != null && !model.trim().isEmpty() ? model.trim() : "gemini-3.8-flash";
-        this.fallbackModel = fallbackModel != null && !fallbackModel.trim().isEmpty() ? fallbackModel.trim() : "gemini-2.5-flash";
+        this.fallbackModel = fallbackModel != null && !fallbackModel.trim().isEmpty() ? fallbackModel.trim() : "gemini-2.0-flash";
         this.headless = headless;
         this.maxSteps = maxSteps > 0 ? maxSteps : 15;
         this.browserType = browserType != null ? browserType.toUpperCase() : "CHROME";
@@ -45,7 +45,7 @@ public class AIBrowserAgent {
     }
 
     public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath, String downloadDirectory) {
-        this(apiKeyPool, model, "gemini-2.5-flash", headless, maxSteps, browserType, cdpEndpoint, logFilePath, downloadDirectory);
+        this(apiKeyPool, model, "gemini-2.0-flash", headless, maxSteps, browserType, cdpEndpoint, logFilePath, downloadDirectory);
     }
 
     public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath) {
