@@ -1,5 +1,8 @@
 package com.automationanywhere.botcommand.aibrowser;
 
+import com.automationanywhere.botcommand.aibrowser.agent.AIBrowserAgent;
+import com.automationanywhere.botcommand.aibrowser.gemini.ApiKeyPool;
+import com.automationanywhere.botcommand.aibrowser.gemini.GeminiClient;
 import com.automationanywhere.botcommand.aibrowser.model.AgentAction;
 import com.automationanywhere.botcommand.aibrowser.model.AgentResult;
 import com.automationanywhere.botcommand.aibrowser.model.StepRecord;
@@ -11,6 +14,7 @@ import org.testng.annotations.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class AIBrowserPackageTest {
@@ -126,5 +130,84 @@ public class AIBrowserPackageTest {
         Assert.assertEquals(arr.get(0).getAsJsonObject().get("status").getAsString(), "SUCCESS");
         Assert.assertEquals(arr.get(2).getAsJsonObject().get("status").getAsString(), "FAILED");
         Assert.assertEquals(arr.get(2).getAsJsonObject().get("actionType").getAsString(), "CLICK");
+    }
+
+    @Test
+    public void testUrlNormalization() {
+        // Bare domains should default to https://
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("google.com"), "https://google.com");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("www.google.com"), "https://www.google.com");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("subdomain.example.com/path?param=123"), "https://subdomain.example.com/path?param=123");
+
+        // Existing http/https schemes should remain untouched
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("https://google.com"), "https://google.com");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("http://example.org/test"), "http://example.org/test");
+
+        // Localhost and loopback IPs should default to http://
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("localhost"), "http://localhost");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("localhost:8080/app"), "http://localhost:8080/app");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("127.0.0.1:3000"), "http://127.0.0.1:3000");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("0.0.0.0:5000"), "http://0.0.0.0:5000");
+
+        // Special schemes
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("about:blank"), "about:blank");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("data:text/html,<h1>Test</h1>"), "data:text/html,<h1>Test</h1>");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("file:///C:/path/file.html"), "file:///C:/path/file.html");
+
+        // File paths
+        Assert.assertTrue(AIBrowserAgent.normalizeUrl("C:\\test\\index.html").startsWith("file:///"));
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("/var/www/index.html"), "file:///var/www/index.html");
+
+        // Whitespace and empty handling
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("   google.com   "), "https://google.com");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl(null), "");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl(""), "");
+        Assert.assertEquals(AIBrowserAgent.normalizeUrl("   "), "");
+    }
+
+    @Test
+    public void testGeminiClientModelCandidates() {
+        ApiKeyPool pool = new ApiKeyPool("dummy-key", null);
+
+        // Primary 3.8 Flash, default fallback 2.5 Flash
+        GeminiClient clientDefault = new GeminiClient(pool, "gemini-3.8-flash");
+        List<String> defaultCandidates = clientDefault.getModelCandidates();
+        Assert.assertEquals(defaultCandidates, Arrays.asList("gemini-3.8-flash", "gemini-2.5-flash"));
+        Assert.assertEquals(clientDefault.getActiveModel(), "gemini-3.8-flash");
+        Assert.assertFalse(clientDefault.isFallbackActive());
+
+        // Primary 2.5 Flash with fallback 2.5 Flash -> auto resolves secondary safety fallback 2.0 Flash
+        GeminiClient client25 = new GeminiClient(pool, "gemini-2.5-flash", "gemini-2.5-flash");
+        List<String> c25Candidates = client25.getModelCandidates();
+        Assert.assertEquals(c25Candidates, Arrays.asList("gemini-2.5-flash", "gemini-2.0-flash"));
+
+        // Fallback explicitly disabled with "NONE"
+        GeminiClient clientNoFallback = new GeminiClient(pool, "gemini-3.8-flash", "NONE");
+        List<String> noFallbackCandidates = clientNoFallback.getModelCandidates();
+        Assert.assertEquals(noFallbackCandidates, Collections.singletonList("gemini-3.8-flash"));
+    }
+
+    @Test
+    public void testAgentResultModelFields() {
+        AgentResult result = new AgentResult(
+                "SUCCESS",
+                "Completed task",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                "/tmp/shot.png",
+                2,
+                0,
+                "",
+                "",
+                "/tmp/run.log",
+                "",
+                0,
+                "gemini-2.5-flash",
+                true
+        );
+
+        Assert.assertEquals(result.getActiveModel(), "gemini-2.5-flash");
+        Assert.assertTrue(result.isModelFallbackOccurred());
+        Assert.assertEquals(result.getStatus(), "SUCCESS");
     }
 }

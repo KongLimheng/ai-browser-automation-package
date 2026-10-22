@@ -1,116 +1,209 @@
 package com.automationanywhere.botcommand.aibrowser.gemini;
 
-import com.automationanywhere.botcommand.aibrowser.logging.ExecutionLogger;
-import com.automationanywhere.botcommand.aibrowser.model.AgentAction;
-import com.google.gson.*;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.automationanywhere.botcommand.aibrowser.logging.ExecutionLogger;
+import com.automationanywhere.botcommand.aibrowser.model.AgentAction;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public class GeminiClient {
     private static final Logger logger = LogManager.getLogger(GeminiClient.class);
     private static final Gson GSON = new GsonBuilder().create();
 
     private final ApiKeyPool apiKeyPool;
-    private final String model;
+    private final String primaryModel;
+    private final String fallbackModel;
+    private volatile String activeModel;
+    private volatile boolean fallbackActive = false;
     private final HttpClient httpClient;
 
-    public GeminiClient(ApiKeyPool apiKeyPool, String model) {
+    public GeminiClient(ApiKeyPool apiKeyPool, String primaryModel, String fallbackModel) {
         this.apiKeyPool = apiKeyPool != null ? apiKeyPool : new ApiKeyPool("", Collections.emptyList());
-        this.model = (model != null && !model.trim().isEmpty()) ? model.trim() : "gemini-2.0-flash";
+        this.primaryModel = (primaryModel != null && !primaryModel.trim().isEmpty()) ? primaryModel.trim()
+                : "gemini-3.8-flash";
+        this.activeModel = this.primaryModel;
+
+        if ("NONE".equalsIgnoreCase(fallbackModel)) {
+            this.fallbackModel = null;
+        } else if (fallbackModel != null && !fallbackModel.trim().isEmpty()) {
+            this.fallbackModel = fallbackModel.trim();
+        } else {
+            this.fallbackModel = "gemini-2.5-flash";
+        }
+
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(25))
                 .build();
     }
 
-    public GeminiClient(String singleApiKey, String model) {
-        this(new ApiKeyPool(singleApiKey, Collections.emptyList()), model);
+    public GeminiClient(ApiKeyPool apiKeyPool, String primaryModel) {
+        this(apiKeyPool, primaryModel, "gemini-2.5-flash");
     }
 
-    public AgentAction decideNextAction(String goal, String currentUrl, String domContext, String base64Screenshot, List<String> history) throws Exception {
+    public GeminiClient(String singleApiKey, String model) {
+        this(new ApiKeyPool(singleApiKey, Collections.emptyList()), model, "gemini-2.5-flash");
+    }
+
+    public List<String> getModelCandidates() {
+        List<String> candidates = new ArrayList<>();
+        if (activeModel != null && !activeModel.isEmpty()) {
+            candidates.add(activeModel);
+        }
+        if (fallbackModel != null && !fallbackModel.isEmpty() && !"NONE".equalsIgnoreCase(fallbackModel)) {
+            if (!fallbackModel.equalsIgnoreCase(activeModel)) {
+                candidates.add(fallbackModel);
+            } else if ("gemini-2.5-flash".equalsIgnoreCase(activeModel)) {
+                candidates.add("gemini-2.0-flash");
+            }
+        }
+        return candidates;
+    }
+
+    public AgentAction decideNextAction(String goal, String currentUrl, String domContext, String base64Screenshot,
+            List<String> history) throws Exception {
         return decideNextAction(goal, currentUrl, domContext, base64Screenshot, history, null, 0);
     }
 
-    public AgentAction decideNextAction(String goal, String currentUrl, String domContext, String base64Screenshot, List<String> history, ExecutionLogger execLogger, int stepNumber) throws Exception {
+    public AgentAction decideNextAction(String goal, String currentUrl, String domContext, String base64Screenshot,
+            List<String> history, ExecutionLogger execLogger, int stepNumber) throws Exception {
         String prompt = buildPrompt(goal, currentUrl, domContext, history);
         String requestJson = buildRequestBody(prompt, base64Screenshot);
 
-        int maxAttempts = Math.max(1, apiKeyPool.size());
+        List<String> candidateModels = getModelCandidates();
         String lastErrorMsg = "";
 
-        for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            String currentKey = apiKeyPool.getActiveKey();
-            int keyIndex = apiKeyPool.getCurrentIndex() + 1;
-            String maskedKey = apiKeyPool.getMaskedCurrentKey();
+        for (int m = 0; m < candidateModels.size(); m++) {
+            String currentCandidateModel = candidateModels.get(m);
+            int maxAttempts = Math.max(1, apiKeyPool.size());
 
-            String endpoint = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, currentKey);
+            for (int attempt = 0; attempt < maxAttempts; attempt++) {
+                String currentKey = apiKeyPool.getActiveKey();
+                int keyIndex = apiKeyPool.getCurrentIndex() + 1;
+                String maskedKey = apiKeyPool.getMaskedCurrentKey();
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(60))
-                    .POST(HttpRequest.BodyPublishers.ofString(requestJson, StandardCharsets.UTF_8))
-                    .build();
+                String endpoint = String.format(
+                        "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
+                        currentCandidateModel, currentKey);
 
-            if (execLogger != null) {
-                execLogger.logGeminiCall(stepNumber, model, keyIndex, apiKeyPool.size(), maskedKey);
-            }
-            logger.info("Calling Gemini API [Model: {}, Key #{}/{}: {}]", model, keyIndex, apiKeyPool.size(), maskedKey);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(endpoint))
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(60))
+                        .POST(HttpRequest.BodyPublishers.ofString(requestJson, StandardCharsets.UTF_8))
+                        .build();
 
-            long apiStart = System.currentTimeMillis();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            long apiLatency = System.currentTimeMillis() - apiStart;
-
-            int statusCode = response.statusCode();
-            String responseBody = response.body();
-
-            if (statusCode == 200) {
-                AgentAction action = parseGeminiResponse(responseBody);
                 if (execLogger != null) {
-                    execLogger.logGeminiResponse(stepNumber, action.getType(), action.getDescription(), apiLatency);
+                    execLogger.logGeminiCall(stepNumber, currentCandidateModel, keyIndex, apiKeyPool.size(), maskedKey);
                 }
-                return action;
+                logger.info("Calling Gemini API [Model: {}, Key #{}/{}: {}]", currentCandidateModel, keyIndex,
+                        apiKeyPool.size(), maskedKey);
+
+                long apiStart = System.currentTimeMillis();
+                HttpResponse<String> response = httpClient.send(request,
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                long apiLatency = System.currentTimeMillis() - apiStart;
+
+                int statusCode = response.statusCode();
+                String responseBody = response.body();
+
+                if (statusCode == 200) {
+                    AgentAction action = parseGeminiResponse(responseBody);
+                    if (execLogger != null) {
+                        execLogger.logGeminiResponse(stepNumber, action.getType(), action.getDescription(), apiLatency);
+                    }
+
+                    // If a fallback model succeeded, promote it as the active model for remaining
+                    // steps
+                    if (!currentCandidateModel.equalsIgnoreCase(this.primaryModel) && !this.fallbackActive) {
+                        this.activeModel = currentCandidateModel;
+                        this.fallbackActive = true;
+                        logger.info("Promoted fallback model '{}' to activeModel for remainder of session",
+                                currentCandidateModel);
+                    }
+
+                    return action;
+                }
+
+                lastErrorMsg = String.format("Status %d (%s): %s", statusCode, currentCandidateModel, responseBody);
+                logger.warn("Gemini API call failed with status {} on Model '{}' Key #{}: {}", statusCode,
+                        currentCandidateModel, keyIndex, responseBody);
+
+                // Auto-rotate key on rotatable error if more keys are available
+                if (ApiKeyPool.isRotatableError(statusCode, responseBody) && attempt < maxAttempts - 1) {
+                    apiKeyPool.rotate();
+                    int nextIndex = apiKeyPool.getCurrentIndex() + 1;
+                    String nextMasked = apiKeyPool.getMaskedCurrentKey();
+
+                    logger.warn(
+                            "Rotatable error detected (HTTP {} / limit). Auto-rotating to Key #{} [{}] on Model '{}'...",
+                            statusCode, nextIndex, nextMasked, currentCandidateModel);
+                    if (execLogger != null) {
+                        execLogger.logKeyRotation(keyIndex, nextIndex, nextMasked, statusCode, "HTTP Error / Limit");
+                    }
+                    if (history != null) {
+                        history.add(String.format(
+                                "Auto-rotation notice: Key #%d (%s) encountered HTTP %d on model '%s'. Switching to Key #%d.",
+                                keyIndex, maskedKey, statusCode, currentCandidateModel, nextIndex));
+                    }
+                    try {
+                        Thread.sleep(500); // brief debounce between key failovers
+                    } catch (InterruptedException ignored) {
+                    }
+                    continue;
+                }
+
+                // If non-rotatable error (e.g. invalid syntax 400), don't burn other keys
+                if (!ApiKeyPool.isRotatableError(statusCode, responseBody)) {
+                    if (execLogger != null) {
+                        execLogger.warn(
+                                String.format("Gemini API non-retryable error on Model '%s' Key #%d: HTTP %d - %s",
+                                        currentCandidateModel, keyIndex, statusCode, responseBody));
+                    }
+                    throw new RuntimeException("Gemini API non-retryable error: " + lastErrorMsg);
+                }
             }
 
-            lastErrorMsg = String.format("Status %d: %s", statusCode, responseBody);
-            logger.warn("Gemini API call failed with status {} on Key #{}: {}", statusCode, keyIndex, responseBody);
-
-            if (ApiKeyPool.isRotatableError(statusCode, responseBody) && attempt < maxAttempts - 1) {
-                apiKeyPool.rotate();
-                int nextIndex = apiKeyPool.getCurrentIndex() + 1;
-                String nextMasked = apiKeyPool.getMaskedCurrentKey();
-
-                logger.warn("Rotatable error detected (HTTP {} / limit). Auto-rotating to Key #{} [{}]...", statusCode, nextIndex, nextMasked);
+            // All keys exhausted for currentCandidateModel. Check if we have a fallback
+            // model!
+            if (m < candidateModels.size() - 1) {
+                String nextFallbackModel = candidateModels.get(m + 1);
+                String msg = String.format(
+                        "Primary model '%s' failed across all %d key(s) (%s). Falling back to model '%s'...",
+                        currentCandidateModel, maxAttempts, lastErrorMsg, nextFallbackModel);
+                logger.warn(msg);
                 if (execLogger != null) {
-                    execLogger.logKeyRotation(keyIndex, nextIndex, nextMasked, statusCode, "HTTP Error / Limit");
+                    execLogger.logModelFallback(currentCandidateModel, nextFallbackModel, 503,
+                            "High Demand / Capacity / Quota Exhaustion");
                 }
                 if (history != null) {
-                    history.add(String.format("Auto-rotation notice: Key #%d (%s) encountered HTTP %d. Switching to Key #%d.", keyIndex, maskedKey, statusCode, nextIndex));
+                    history.add(String.format(
+                            "Model failover notice: Model '%s' unavailable. Switching to fallback model '%s' across API key pool.",
+                            currentCandidateModel, nextFallbackModel));
                 }
-                try {
-                    Thread.sleep(500); // brief debounce between key failovers
-                } catch (InterruptedException ignored) {}
-                continue;
-            }
-
-            // If non-rotatable error (e.g. invalid syntax 400), don't burn other keys
-            if (!ApiKeyPool.isRotatableError(statusCode, responseBody)) {
-                if (execLogger != null) {
-                    execLogger.warn(String.format("Gemini API non-retryable error on Key #%d: HTTP %d - %s", keyIndex, statusCode, responseBody));
+                if (apiKeyPool.hasMultipleKeys()) {
+                    apiKeyPool.rotate();
                 }
-                throw new RuntimeException("Gemini API non-retryable error: " + lastErrorMsg);
             }
         }
 
-        throw new RuntimeException(String.format("Gemini API request failed across all %d key(s). Last error: %s", maxAttempts, lastErrorMsg));
+        throw new RuntimeException(
+                String.format("Gemini API request failed across all %d key(s) and candidate models %s. Last error: %s",
+                        apiKeyPool.size(), candidateModels, lastErrorMsg));
     }
 
     private String buildPrompt(String goal, String currentUrl, String domContext, List<String> history) {
@@ -133,16 +226,18 @@ public class GeminiClient {
             sb.append("(No interactive elements found or page still loading)\n");
         }
 
-        sb.append("\nYou are provided with a screenshot of the current page with yellow numbered badges [id] over interactive elements.\n");
+        sb.append(
+                "\nYou are provided with a screenshot of the current page with yellow numbered badges [id] over interactive elements.\n");
         sb.append("Carefully inspect the screenshot and element list, then choose ONE next action.\n\n");
         sb.append("Available action types:\n");
         sb.append("- CLICK: requires 'elementId' (number)\n");
         sb.append("- TYPE: requires 'elementId' (number) and 'text' (string), optionally 'pressEnter' (boolean)\n");
-        sb.append("- NAVIGATE: requires 'url' (string)\n");
+        sb.append("- NAVIGATE: requires 'url' (string, e.g. 'https://www.google.com')\n");
         sb.append("- SCROLL: requires 'scrollAmount' (number, e.g. 500 for down, -500 for up)\n");
         sb.append("- KEY_PRESS: requires 'key' (e.g. 'Enter', 'Tab', 'Escape')\n");
         sb.append("- WAIT: requires 'waitSeconds' (number, e.g. 3)\n");
-        sb.append("- FINISH: when the objective is fully completed. Put your final answer or extracted data into 'result'.\n");
+        sb.append(
+                "- FINISH: when the objective is fully completed. Put your final answer or extracted data into 'result'.\n");
         sb.append("- FAIL: when the objective cannot be completed. Put explanation into 'result'.\n\n");
         sb.append("Return ONLY a valid JSON object matching the schema.\n");
 
@@ -272,5 +367,21 @@ public class GeminiClient {
 
     public ApiKeyPool getApiKeyPool() {
         return apiKeyPool;
+    }
+
+    public String getActiveModel() {
+        return activeModel;
+    }
+
+    public String getPrimaryModel() {
+        return primaryModel;
+    }
+
+    public String getFallbackModel() {
+        return fallbackModel;
+    }
+
+    public boolean isFallbackActive() {
+        return fallbackActive;
     }
 }

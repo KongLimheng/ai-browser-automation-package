@@ -24,6 +24,7 @@ public class AIBrowserAgent {
 
     private final ApiKeyPool apiKeyPool;
     private final String model;
+    private final String fallbackModel;
     private final boolean headless;
     private final int maxSteps;
     private final String browserType;
@@ -31,15 +32,20 @@ public class AIBrowserAgent {
     private final String logFilePath;
     private final String downloadDirectory;
 
-    public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath, String downloadDirectory) {
+    public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, String fallbackModel, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath, String downloadDirectory) {
         this.apiKeyPool = apiKeyPool != null ? apiKeyPool : new ApiKeyPool("", Collections.emptyList());
         this.model = model != null && !model.trim().isEmpty() ? model.trim() : "gemini-3.8-flash";
+        this.fallbackModel = fallbackModel != null && !fallbackModel.trim().isEmpty() ? fallbackModel.trim() : "gemini-2.5-flash";
         this.headless = headless;
         this.maxSteps = maxSteps > 0 ? maxSteps : 15;
         this.browserType = browserType != null ? browserType.toUpperCase() : "CHROME";
         this.cdpEndpoint = cdpEndpoint != null ? cdpEndpoint.trim() : "";
         this.logFilePath = logFilePath != null ? logFilePath.trim() : "";
         this.downloadDirectory = downloadDirectory != null ? downloadDirectory.trim() : "";
+    }
+
+    public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath, String downloadDirectory) {
+        this(apiKeyPool, model, "gemini-2.5-flash", headless, maxSteps, browserType, cdpEndpoint, logFilePath, downloadDirectory);
     }
 
     public AIBrowserAgent(ApiKeyPool apiKeyPool, String model, boolean headless, int maxSteps, String browserType, String cdpEndpoint, String logFilePath) {
@@ -66,6 +72,9 @@ public class AIBrowserAgent {
         int failedStep = 0;
         String failedAction = "";
         String errorMessage = "";
+        String resolvedActiveModel = model;
+        boolean fallbackOccurred = false;
+        GeminiClient geminiClient = null;
 
         try (ExecutionLogger execLogger = new ExecutionLogger(logFilePath)) {
             execLogger.logSessionStart(goalPrompt, model, browserType, headless, startUrl, apiKeyPool.size());
@@ -134,14 +143,24 @@ public class AIBrowserAgent {
                 });
 
                 if (startUrl != null && !startUrl.trim().isEmpty()) {
-                    execLogger.info("Navigating to initial start URL: " + startUrl);
-                    page.navigate(startUrl);
+                    String resolvedUrl = normalizeUrl(startUrl);
+                    String logMsg = resolvedUrl.equals(startUrl.trim())
+                            ? "Navigating to initial start URL: " + resolvedUrl
+                            : "Navigating to initial start URL: " + resolvedUrl + " (normalized from '" + startUrl.trim() + "')";
+                    execLogger.info(logMsg);
                     try {
-                        page.waitForLoadState(LoadState.DOMCONTENTLOADED);
-                    } catch (Exception ignored) {}
+                        page.navigate(resolvedUrl);
+                        try {
+                            page.waitForLoadState(LoadState.DOMCONTENTLOADED);
+                        } catch (Exception ignored) {}
+                    } catch (Exception navEx) {
+                        String navErr = navEx.getMessage() != null ? navEx.getMessage() : navEx.toString();
+                        execLogger.warn("Initial navigation to '" + resolvedUrl + "' failed: " + navErr);
+                        history.add("System notice: Initial navigation to " + resolvedUrl + " failed: " + navErr);
+                    }
                 }
 
-                GeminiClient geminiClient = new GeminiClient(apiKeyPool, model);
+                geminiClient = new GeminiClient(apiKeyPool, model, fallbackModel);
 
                 for (int step = 1; step <= maxSteps; step++) {
                     stepsExecuted = step;
@@ -235,10 +254,11 @@ public class AIBrowserAgent {
                                 page.waitForTimeout(1000);
                             }
                         } else if ("NAVIGATE".equals(type)) {
-                            stepRecord.setTargetUrl(action.getUrl());
-                            execLogger.logActionExecution(step, "NAVIGATE", "URL: " + action.getUrl());
-                            if (action.getUrl() != null && !action.getUrl().isEmpty()) {
-                                page.navigate(action.getUrl());
+                            String targetUrl = normalizeUrl(action.getUrl());
+                            stepRecord.setTargetUrl(targetUrl);
+                            execLogger.logActionExecution(step, "NAVIGATE", "URL: " + targetUrl);
+                            if (!targetUrl.isEmpty()) {
+                                page.navigate(targetUrl);
                                 try {
                                     page.waitForLoadState(LoadState.DOMCONTENTLOADED);
                                 } catch (Exception ignored) {}
@@ -334,6 +354,11 @@ public class AIBrowserAgent {
             String finalDownloadedPath = downloadedFiles.isEmpty() ? "" : downloadedFiles.get(downloadedFiles.size() - 1);
             int totalDownloads = downloadedFiles.size();
 
+            if (geminiClient != null) {
+                resolvedActiveModel = geminiClient.getActiveModel();
+                fallbackOccurred = geminiClient.isFallbackActive();
+            }
+
             return new AgentResult(
                     status,
                     finalOutput,
@@ -346,7 +371,9 @@ public class AIBrowserAgent {
                     errorMessage,
                     execLogger.getLogFilePath(),
                     finalDownloadedPath,
-                    totalDownloads
+                    totalDownloads,
+                    resolvedActiveModel,
+                    fallbackOccurred
             );
         }
     }
@@ -380,5 +407,57 @@ public class AIBrowserAgent {
 
     public String getDownloadDirectory() {
         return downloadDirectory;
+    }
+
+    public String getFallbackModel() {
+        return fallbackModel;
+    }
+
+    /**
+     * Normalizes a web or local URL string, ensuring an appropriate protocol scheme is present.
+     * Prevents Playwright 'Protocol error (Page.navigate): Cannot navigate to invalid URL' when
+     * bare domain names (e.g. 'google.com', 'www.google.com') are provided.
+     *
+     * @param input Raw URL or domain string
+     * @return Normalized URL with protocol scheme, or empty string if input is null/empty
+     */
+    public static String normalizeUrl(String input) {
+        if (input == null) {
+            return "";
+        }
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
+        String lower = trimmed.toLowerCase();
+        if (lower.startsWith("http://") || lower.startsWith("https://")
+                || lower.startsWith("file://") || lower.startsWith("about:")
+                || lower.startsWith("data:") || lower.startsWith("chrome://")
+                || lower.startsWith("edge://")) {
+            return trimmed;
+        }
+
+        // Windows local file path: C:\path or C:/path
+        if (trimmed.matches("^[a-zA-Z]:[\\\\/].*")) {
+            try {
+                return Paths.get(trimmed).toUri().toString();
+            } catch (Exception ignored) {
+                return "file:///" + trimmed.replace('\\', '/');
+            }
+        }
+
+        // Unix local file path
+        if (trimmed.startsWith("/") && (trimmed.endsWith(".html") || trimmed.endsWith(".htm"))) {
+            return "file://" + trimmed;
+        }
+
+        // Localhost and loopback IPs default to http://
+        if (lower.startsWith("localhost") || lower.startsWith("127.0.0.1") || lower.startsWith("0.0.0.0")) {
+            return "http://" + trimmed;
+        }
+
+        // Standard web domains default to https://
+        return "https://" + trimmed;
     }
 }

@@ -62,7 +62,7 @@ public class RunAIBrowserTaskAction {
         List<Value> apiKeysList,
 
         @Idx(index = "4", type = AttributeType.TEXT)
-        @Pkg(label = "Start URL (Optional)", description = "Initial website URL to open (leave blank to let AI decide or navigate)", default_value = "", default_value_type = DataType.STRING)
+        @Pkg(label = "Start URL (Optional)", description = "Initial website URL to open (e.g. https://www.google.com, google.com). Leave blank to let AI decide or navigate.", default_value = "", default_value_type = DataType.STRING)
         String startUrl,
 
         @Idx(index = "5", type = AttributeType.SELECT, options = {
@@ -112,7 +112,16 @@ public class RunAIBrowserTaskAction {
 
         @Idx(index = "12", type = AttributeType.TEXT)
         @Pkg(label = "Download Directory (Optional)", description = "Directory path to save intercepted file downloads (e.g. D:\\abc or C:\\Bots\\Downloads). Accepts bot variables. If left blank, files are saved to a temporary folder.", default_value = "", default_value_type = DataType.STRING)
-        String downloadDirectory
+        String downloadDirectory,
+
+        @Idx(index = "13", type = AttributeType.SELECT, options = {
+            @Idx.Option(index = "13.1", pkg = @Pkg(label = "Gemini 2.5 Flash (Recommended Default Fallback)", value = "gemini-2.5-flash")),
+            @Idx.Option(index = "13.2", pkg = @Pkg(label = "Gemini 2.0 Flash", value = "gemini-2.0-flash")),
+            @Idx.Option(index = "13.3", pkg = @Pkg(label = "Gemini 1.5 Flash", value = "gemini-1.5-flash")),
+            @Idx.Option(index = "13.4", pkg = @Pkg(label = "Disable Model Fallback", value = "NONE"))
+        })
+        @Pkg(label = "Fallback Gemini Model (Optional)", description = "Automatic fallback model if primary model experiences HTTP 503 high demand or quota exhaustion.", default_value = "gemini-2.5-flash", default_value_type = DataType.STRING)
+        String fallbackModel
 
     ) {
         // Resolve effective model ID
@@ -127,8 +136,11 @@ public class RunAIBrowserTaskAction {
             effectiveModel = "gemini-3.8-flash";
         }
 
-        logger.info("Executing RunAIBrowserTaskAction - Model: {}, Browser: {}, Headless: {}, LogPath: {}, DownloadDir: {}",
-                effectiveModel, browserType, headless, logFilePath, downloadDirectory);
+        String effectiveFallbackModel = (fallbackModel != null && !fallbackModel.trim().isEmpty())
+                ? fallbackModel.trim() : "gemini-2.5-flash";
+
+        logger.info("Executing RunAIBrowserTaskAction - Model: {}, FallbackModel: {}, Browser: {}, Headless: {}, LogPath: {}, DownloadDir: {}",
+                effectiveModel, effectiveFallbackModel, browserType, headless, logFilePath, downloadDirectory);
 
         if (prompt == null || prompt.trim().isEmpty()) {
             throw new BotCommandException("Prompt / Objective cannot be empty.");
@@ -155,6 +167,7 @@ public class RunAIBrowserTaskAction {
         AIBrowserAgent agent = new AIBrowserAgent(
             keyPool,
             effectiveModel,
+            effectiveFallbackModel,
             isHeadless,
             stepsLimit,
             browserType,
@@ -182,6 +195,8 @@ public class RunAIBrowserTaskAction {
         responseMap.put("logFilePath", new StringValue(result.getLogFilePath()));
         responseMap.put("downloadedFilePath", new StringValue(result.getDownloadedFilePath()));
         responseMap.put("downloadCount", new StringValue(String.valueOf(result.getDownloadCount())));
+        responseMap.put("activeModel", new StringValue(result.getActiveModel()));
+        responseMap.put("modelFallbackOccurred", new StringValue(String.valueOf(result.isModelFallbackOccurred())));
 
         DictionaryValue dictValue = new DictionaryValue();
         dictValue.set(responseMap);

@@ -1,12 +1,13 @@
 package com.automationanywhere.botcommand.aibrowser;
 
-import com.automationanywhere.botcommand.aibrowser.gemini.ApiKeyPool;
-import org.testng.Assert;
-import org.testng.annotations.Test;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
+import org.testng.Assert;
+import org.testng.annotations.Test;
+
+import com.automationanywhere.botcommand.aibrowser.gemini.ApiKeyPool;
 
 public class ApiKeyPoolTest {
 
@@ -77,6 +78,9 @@ public class ApiKeyPoolTest {
         Assert.assertTrue(ApiKeyPool.isRotatableError(403, "{\"error\": {\"status\": \"RESOURCE_EXHAUSTED\"}}"));
         Assert.assertTrue(ApiKeyPool.isRotatableError(400, "Rate_limit_exceeded for current quota"));
         Assert.assertTrue(ApiKeyPool.isRotatableError(200, "overloaded server"));
+        Assert.assertTrue(ApiKeyPool.isRotatableError(503,
+                "This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."));
+        Assert.assertTrue(ApiKeyPool.isRotatableError(200, "{\"status\": \"UNAVAILABLE\"}"));
 
         // Non-rotatable
         Assert.assertFalse(ApiKeyPool.isRotatableError(400, "{\"error\": \"INVALID_ARGUMENT: missing field\"}"));

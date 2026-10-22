@@ -1,11 +1,11 @@
 package com.automationanywhere.botcommand.aibrowser.model;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class AgentResult {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -22,36 +22,59 @@ public class AgentResult {
     private final String logFilePath;
     private final String downloadedFilePath;
     private final int downloadCount;
+    private final String activeModel;
+    private final boolean modelFallbackOccurred;
 
-    public AgentResult(String status, String outputResult, List<String> steps, String lastScreenshotPath, int stepCount) {
-        this(status, outputResult, steps, Collections.emptyList(), lastScreenshotPath, stepCount, 0, "", "", "", "", 0);
+    public AgentResult(String status, String outputResult, List<String> steps, String lastScreenshotPath,
+            int stepCount) {
+        this(status, outputResult, steps, Collections.emptyList(), lastScreenshotPath, stepCount, 0, "", "", "", "", 0,
+                "", false);
     }
 
     public AgentResult(String status,
-                       String outputResult,
-                       List<String> steps,
-                       List<StepRecord> stepRecords,
-                       String lastScreenshotPath,
-                       int stepCount,
-                       int failedStep,
-                       String failedAction,
-                       String errorMessage,
-                       String logFilePath) {
-        this(status, outputResult, steps, stepRecords, lastScreenshotPath, stepCount, failedStep, failedAction, errorMessage, logFilePath, "", 0);
+            String outputResult,
+            List<String> steps,
+            List<StepRecord> stepRecords,
+            String lastScreenshotPath,
+            int stepCount,
+            int failedStep,
+            String failedAction,
+            String errorMessage,
+            String logFilePath) {
+        this(status, outputResult, steps, stepRecords, lastScreenshotPath, stepCount, failedStep, failedAction,
+                errorMessage, logFilePath, "", 0, "", false);
     }
 
     public AgentResult(String status,
-                       String outputResult,
-                       List<String> steps,
-                       List<StepRecord> stepRecords,
-                       String lastScreenshotPath,
-                       int stepCount,
-                       int failedStep,
-                       String failedAction,
-                       String errorMessage,
-                       String logFilePath,
-                       String downloadedFilePath,
-                       int downloadCount) {
+            String outputResult,
+            List<String> steps,
+            List<StepRecord> stepRecords,
+            String lastScreenshotPath,
+            int stepCount,
+            int failedStep,
+            String failedAction,
+            String errorMessage,
+            String logFilePath,
+            String downloadedFilePath,
+            int downloadCount) {
+        this(status, outputResult, steps, stepRecords, lastScreenshotPath, stepCount, failedStep, failedAction,
+                errorMessage, logFilePath, downloadedFilePath, downloadCount, "", false);
+    }
+
+    public AgentResult(String status,
+            String outputResult,
+            List<String> steps,
+            List<StepRecord> stepRecords,
+            String lastScreenshotPath,
+            int stepCount,
+            int failedStep,
+            String failedAction,
+            String errorMessage,
+            String logFilePath,
+            String downloadedFilePath,
+            int downloadCount,
+            String activeModel,
+            boolean modelFallbackOccurred) {
         this.status = status != null ? status : "FAILED";
         this.outputResult = outputResult != null ? outputResult : "";
         this.steps = steps != null ? steps : Collections.emptyList();
@@ -64,6 +87,8 @@ public class AgentResult {
         this.logFilePath = logFilePath != null ? logFilePath : "";
         this.downloadedFilePath = downloadedFilePath != null ? downloadedFilePath : "";
         this.downloadCount = downloadCount;
+        this.activeModel = activeModel != null ? activeModel : "";
+        this.modelFallbackOccurred = modelFallbackOccurred;
     }
 
     public String getStatus() {
@@ -127,5 +152,13 @@ public class AgentResult {
 
     public int getDownloadCount() {
         return downloadCount;
+    }
+
+    public String getActiveModel() {
+        return activeModel;
+    }
+
+    public boolean isModelFallbackOccurred() {
+        return modelFallbackOccurred;
     }
 }

@@ -10,7 +10,7 @@
   "runAIBrowserTask.apiKeysList.label": "Gemini API Keys (List Variable)",
   "runAIBrowserTask.apiKeysList.description": "Optional: List of Gemini API keys from an Automation Anywhere List variable.",
   "runAIBrowserTask.startUrl.label": "Start URL (Optional)",
-  "runAIBrowserTask.startUrl.description": "Initial website URL to open",
+  "runAIBrowserTask.startUrl.description": "Initial website URL to open (e.g. https://www.google.com, google.com). Leave blank to let AI decide or navigate.",
   "runAIBrowserTask.model.label": "Gemini Model",
   "runAIBrowserTask.model.description": "Choose the Gemini model for visual understanding and decision making",
   "runAIBrowserTask.browserType.label": "Browser Type",
@@ -26,5 +26,7 @@
   "runAIBrowserTask.customModel.label": "Custom Gemini Model ID (Optional)",
   "runAIBrowserTask.customModel.description": "Specify custom or fine-tuned Gemini model ID (e.g. gemini-3.8-flash) if 'Custom Model' is selected above, or override model name.",
   "runAIBrowserTask.downloadDirectory.label": "Download Directory (Optional)",
-  "runAIBrowserTask.downloadDirectory.description": "Directory path to save intercepted file downloads (e.g. D:\\abc or C:\\Bots\\Downloads). Accepts bot variables."
+  "runAIBrowserTask.downloadDirectory.description": "Directory path to save intercepted file downloads (e.g. D:\\abc or C:\\Bots\\Downloads). Accepts bot variables.",
+  "runAIBrowserTask.fallbackModel.label": "Fallback Gemini Model (Optional)",
+  "runAIBrowserTask.fallbackModel.description": "Automatic fallback model if primary model experiences HTTP 503 high demand or quota exhaustion."
 }

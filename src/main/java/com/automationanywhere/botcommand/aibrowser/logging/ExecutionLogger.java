@@ -120,6 +120,12 @@ public class ExecutionLogger implements AutoCloseable {
                         fromIndex, statusCode, reason, toIndex, maskedKey));
     }
 
+    public void logModelFallback(String fromModel, String toModel, int statusCode, String reason) {
+        logLine("WARN",
+                String.format("  ! MODEL FAILOVER: Primary model '%s' unavailable (HTTP %d - %s). Falling back to model '%s' across key pool...",
+                        fromModel, statusCode, reason, toModel));
+    }
+
     public void logActionExecution(int step, String actionType, String details) {
         logLine("INFO", String.format("  [Step %d] Executing browser action: [%s] %s", step, actionType, details));
     }

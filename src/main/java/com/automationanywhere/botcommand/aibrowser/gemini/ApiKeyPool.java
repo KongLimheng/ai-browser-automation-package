@@ -92,7 +92,10 @@ public class ApiKeyPool {
                     || lower.contains("quota_exceeded")
                     || lower.contains("exceeded your current quota")
                     || lower.contains("overloaded")
-                    || lower.contains("temporarily unavailable");
+                    || lower.contains("temporarily unavailable")
+                    || lower.contains("high demand")
+                    || lower.contains("spikes in demand")
+                    || lower.contains("unavailable");
         }
 
         return false;
